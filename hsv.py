@@ -1,12 +1,54 @@
 #!/usr/bin/env python
+#Copyright (C) 2011 Thomas Stewart <thomas@stewarts.org.uk>
+#This program is free software: you can redistribute it and/or modify
+#it under the terms of the GNU General Public License as published by
+#the Free Software Foundation, either version 3 of the License, or
+#(at your option) any later version.
+#
+#This program is distributed in the hope that it will be useful,
+#but WITHOUT ANY WARRANTY; without even the implied warranty of
+#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#GNU General Public License for more details.
+#
+#You should have received a copy of the GNU General Public License
+#along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import getopt
 import urllib, urllib2
 import StringIO, lxml.etree
 import time, datetime
 import vobject
 import sys, pprint; pp = pprint.PrettyPrinter(depth=6)
 
-memberid = 
-memberpin = 
+memberid = 0
+memberpin = 0
+
+try:
+        opts, args = getopt.getopt(sys.argv[1:], "h",
+                ["help", "memberid=", "memberpin="])
+except getopt.error, msg:
+        print str(msg)
+        sys.exit(2)
+
+for o, a in opts:
+        if o in ("-h", "--help"):
+                print "hsv [options...]"
+                print "Utility to download and parse Hertfordshire Sports Village class"
+                print "bookings and ouput ical file"
+                print "  -h --help        this info"
+                print "     --memberid  hsv member id"
+                print "     --memberpin hsv member pin"
+                sys.exit()
+
+        elif o in ("--memberid"):
+                memberid = int(a)
+
+        elif o in ("--memberpin"):
+                memberpin = int(a)
+
+if(memberid == 0 or memberpin == 0):
+        print "Error: memberid or memberpin not set"
+        sys.exit()
 
 def dump_doc(doc):
         f = open("t.html", "w")
