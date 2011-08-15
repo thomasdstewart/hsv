@@ -22,10 +22,11 @@ import sys, pprint; pp = pprint.PrettyPrinter(depth=6)
 
 memberid = 0
 memberpin = 0
+listonly = False
 
 try:
-        opts, args = getopt.getopt(sys.argv[1:], "h",
-                ["help", "memberid=", "memberpin="])
+        opts, args = getopt.getopt(sys.argv[1:], "hil",
+                ["help", "memberid=", "memberpin=", "list"])
 except getopt.error, msg:
         print str(msg)
         sys.exit(2)
@@ -38,6 +39,7 @@ for o, a in opts:
                 print "  -h --help        this info"
                 print "     --memberid  hsv member id"
                 print "     --memberpin hsv member pin"
+                print "  -l --list      dont generate ics"
                 sys.exit()
 
         elif o in ("--memberid"):
@@ -45,6 +47,9 @@ for o, a in opts:
 
         elif o in ("--memberpin"):
                 memberpin = int(a)
+
+        elif o in ("-l", "--list"):
+                listonly = True
 
 if(memberid == 0 or memberpin == 0):
         print "Error: memberid or memberpin not set"
@@ -66,9 +71,11 @@ class NoRedirectHandler(urllib2.HTTPRedirectHandler):
 site = 'http://hsvbookings.herts.ac.uk'
 url = site + '/Connect/mrmlogin.aspx'
 req = urllib2.urlopen(url)
+time.sleep(5)
 html = req.read()
 html = StringIO.StringIO(html)
 doc = lxml.etree.parse(html, lxml.etree.HTMLParser())
+#dump_doc(doc)
 
 params = {}
 params['__VIEWSTATE'] = doc.xpath('//input[@name="__VIEWSTATE"]/@value')[0]
@@ -85,40 +92,66 @@ params['ctl00$MemberSearchCtl$ddlFindMethod'] = '0'
 opener = urllib2.build_opener(NoRedirectHandler)
 urllib2.install_opener(opener)
 req = urllib2.urlopen(urllib2.Request(url, urllib.urlencode(params)))
+time.sleep(5)
 cookie = req.info()['Set-Cookie']
 html = req.read()
 html = StringIO.StringIO(html)
 doc = lxml.etree.parse(html, lxml.etree.HTMLParser())
+#dump_doc(doc)
 url = site + urllib.unquote(doc.xpath('//a/@href')[0])
 
 headers = { 'Cookie' : cookie }
 req = urllib2.urlopen(urllib2.Request(url, headers=headers))
+time.sleep(5)
 html = req.read()
 html = StringIO.StringIO(html)
 doc = lxml.etree.parse(html, lxml.etree.HTMLParser())
+#dump_doc(doc)
+url = site + urllib.unquote(doc.xpath('//li[@id="ctl00_ctl09_ManageBookingsli"]/a/@href')[0])
+
+req = urllib2.urlopen(urllib2.Request(url, headers=headers))
+time.sleep(5)
+html = req.read()
+html = StringIO.StringIO(html)
+doc = lxml.etree.parse(html, lxml.etree.HTMLParser())
+#dump_doc(doc)
 
 events = []
-for event in doc.xpath(
-                '//div[@id="ctl00_UpcomingBookings1_TodaysBookingsPanel"]/table/tr'):
-        atime = event.xpath('td/text()')[0]
+for event in doc.xpath('//table[@class="viewMyBookingsTable"]/tr'):
+        if(len(event.xpath('td/span/text()')) == 0):
+                continue
+        location = event.xpath('td/span/text()')[0]
+        eventdsc = event.xpath('td[4]/text()')[0].strip().split(' ')[0]
+
         year = str(datetime.datetime.now().year)
-        atime = year + "/" + atime
-        atime = datetime.datetime(*(time.strptime(atime, "%Y/%d/%m %H:%M")[0:6]))
-        atime = atime.isoformat(' ')
+        daymonth = event.xpath('td[2]/text()')[0].strip().split(' ')[1:3]
+        setime = event.xpath('td[3]/text()')[0].strip().split(' ')
+        stime = setime[0]
+        etime = setime[2]
 
-        event = event.xpath('td/a/@title')[0].split(' ')[0].strip()
-        events.append([atime, event])
+        stime = stime + ' ' + daymonth[0] + '/' + daymonth[1] + '/' + year
+        stime = datetime.datetime(*(time.strptime(stime, "%H:%M %d/%b/%Y")[0:6]))
+        stime = stime.strftime("%Y%m%dT%H%M00")
 
+        etime = etime + ' ' + daymonth[0] + '/' + daymonth[1] + '/' + year
+        etime = datetime.datetime(*(time.strptime(etime, "%H:%M %d/%b/%Y")[0:6]))
+        etime = etime.strftime("%Y%m%dT%H%M00")
 
-events.sort()
+        events.append([location, eventdsc, stime, etime])
+
+events = sorted(events, key=lambda event: event[2])
+if(listonly):
+     pp.pprint(events)
+     sys.exit()
 
 cal = vobject.iCalendar()
-for e in events:
-        event = cal.add('vevent')
-        event.add('summary').value = e[1]
-        event.add('location').value = "Hertfordshire Sports Village"
-        event.add('dstart').value = e[0]
-        event.add('dsend').value = e[0]
+cal.add('method').value = 'PUBLISH'
+for event in events:
+        vevent = cal.add('vevent')
+        vevent.add('summary').value = event[1]
+        vevent.add('location').value = event[0]
+        vevent.add('dstart').value = event[2]
+        vevent.add('dsend').value = event[3]
 
 print cal.serialize()
 
